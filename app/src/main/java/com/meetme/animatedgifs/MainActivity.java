@@ -232,6 +232,7 @@ public class MainActivity extends AppCompatActivity implements AnimatedGifManage
             img.setLayoutParams(lp);
 
             parent.addView(img);
+
             Ion.with(parent.getContext()).load(url).intoImageView(img);
             callback.onImageLoaded(this);
         }
@@ -272,7 +273,39 @@ public class MainActivity extends AppCompatActivity implements AnimatedGifManage
     }
 
     /// Network stuff to get urls ///
-    public static String SEARCH_URL_PREFIX = "http://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&limit=20&q=";
+    GifSite mGifSite = GifSite.giphy;
+
+    enum GifSite {
+        giphy("http://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&limit=20&q=%s",
+                "\"fixed_height_small\":{\"url\":\""),
+
+        imgur("http://imgur.com/r/%s",
+                "img alt=\"\" src=\""),
+
+        bing("http://www.bing.com/images/search?q=%s+filterui:photo-animatedgif+filterui:imagesize-medium",
+                     " ihk=\""),
+
+        google("https://www.google.com/search?tbs=itp:animated%2Cisz:m&tbm=isch&q=usa", "blarg");
+
+        public String searchKey;
+        public String paramUrl;
+
+        GifSite(String paramUrl, String searchKey) {
+            this.paramUrl = paramUrl;
+            this.searchKey = searchKey;
+        }
+
+        public String modifyUrl(String url) {
+            switch (this) {
+                case imgur:
+                    url = "http:" + url;
+                    //url = url.replace("b.", ".");
+                    break;
+            }
+
+            return url;
+        }
+    }
 
     final OkHttpClient okHttpClient = new OkHttpClient();
 
@@ -282,8 +315,11 @@ public class MainActivity extends AppCompatActivity implements AnimatedGifManage
      */
     public ArrayList<String> getUrls(String search) {
 
+        String urlStr = String.format(mGifSite.paramUrl,search);
+        Log.v(TAG, "Url is " + urlStr);
+
         Request request = new Request.Builder()
-                .url(SEARCH_URL_PREFIX + search)
+                .url(urlStr)
                 .build();
 
         String json = null;
@@ -291,30 +327,30 @@ public class MainActivity extends AppCompatActivity implements AnimatedGifManage
         try {
             okhttp3.Response response = okHttpClient.newCall(request).execute();
             json = response.body().string();
+            Log.v(TAG, json);
         } catch (IOException e) {
             return null;
         }
 
         ArrayList<String> urls = new ArrayList<>();
 
-        int i = json.indexOf(startPhrase, 0);
+        int i = json.indexOf(mGifSite.searchKey, 0);
+
+        Log.v(TAG, "Search key " + mGifSite.searchKey + " found at " + i + " json size is " + json.length());
+        Log.v(TAG, "last chars " + json.substring(json.length() - 20));
 
         // oh hey, um, i didn't see you there... no, no i'm not parsing JSON, haha! what kind of
         // unenlightened moron would manually look through JSON for urls? *runs away*
         while (i > 0) {
-            int end = json.indexOf('"', i + startPhrase.length());
-            String url = json.substring(i + startPhrase.length(), end).replace("\\", "");
+            int end = json.indexOf('"', i + mGifSite.searchKey.length());
+            String url = json.substring(i + mGifSite.searchKey.length(), end).replace("\\", "");
+            url = mGifSite.modifyUrl(url);
             urls.add(url);
-            i = json.indexOf(startPhrase, end);
+            i = json.indexOf(mGifSite.searchKey, end);
 
             Log.v(TAG, "found url " + url);
         }
 
         return urls;
     }
-
-    // oh, how'd this old thing get down here? Probably just some unused, debug code- NO NO DON'T,
-    // don't delete it. It, um, it might have sentimental value. No harm in keeping a few extra
-    // bytes around
-    final static String startPhrase = "\"fixed_height_small\":{\"url\":\"";
 }
